@@ -1,10 +1,6 @@
-**TEAM: LAILA SPREJER, PARKER FOE, ROY WHITE, TIMO HONSEL**
-
 # Part A. Collecting geolocated Twitter data.
 
-1. Collect a sample of geolocated tweets using a token created with the instructions found at https://developer.twitter.com.  The geographic bounding box can span the entire globe or -- probably better for the exercise -- just focus on a given continent (e.g. Europe or Africa). Keep the connection open for a while until you have a reasonably large sample. 100,000 to 200,000 tweets should be more than enough for this exercise.
-
-To avoid running this chunk of code every time you compile the file, you can either take this code to a separate R file, and just keep it here. (But make sure you explain that!) Or use the `cache` option in the R chunk, as shown below, to make sure it only re-runs after you change the code:
+1. Collect a sample of geolocated tweets using a token created with the instructions found at https://developer.twitter.com.
 ```{r global_options, include = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE,
                       fig.width = 10, fig.height = 6)
@@ -16,12 +12,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE,
 # We decided to focus on EU countries.
 ```
 
-In case you don't have a working token, [here](https://www.dropbox.com/s/n7l84t6vj95ue9e/europe-tweets.csv?dl=0)'s a link to a .csv file that contains nearly 200,000 geolocated tweets from Europe.
-
-Please don't upload the .json file with the Tweets to GitHub!  We suggest you store it somewhere else in your hard drive. This is the only RMarkdown file where you'll have to work with the entire dataset. You could also keep only the relevant variables that you need (similar as the .csv file above), and save only that (smaller) file.
-
-2. Read the Tweets into R and compute some descriptive statistics. How many Tweets did you collect? Which are the most popular hashtags? (This step may take some time as well, feel free to use the cache function below to make sure you're not re-reading the file every time you compile.)
-
+2. Read the Tweets into R and compute some descriptive statistics.
 ```{r, cache=TRUE}
 library(streamR)
 tweets <- parseTweets("tweets_geo_eu.json")
@@ -225,7 +216,7 @@ p <- plot_lang_dist %>%
 p
 ```
 
-5. Finally, use the `map.where` function to identify the country from which each Tweet is coming from, and add it as a new variable to the data frame. Which countries produced the most and least tweets? 
+5. Which countries produced the most and least tweets? 
 
 ```{r}
 # Country variable alrady created in Q2.
@@ -235,9 +226,7 @@ tail(country_tab)
 ```
 
 
-Then, create a data frame with three variables: `country`, `language`, and `n_tweets` (number of tweets for each combination of country and language). To make it smaller, you can keep only the rows for which `n_tweets` is greater than 0. Save this data frame into a file called `country_language_distribution.csv` -- we will work with it in part B. 
-
-For a clue on what this dataset should look like, see the `Language data` tab in `2003_fractionalization.xls`.
+Create a data frame with three variables: `country`, `language`, and `n_tweets` (number of tweets for each combination of country and language). Save this data frame into a file called `country_language_distribution.csv` -- we will work with it in part B.
 
 ```{r}
 country_lang_dist <- summarise(group_by(tweets_without_und, country, language),
