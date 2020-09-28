@@ -1,0 +1,134 @@
+**TEAM: LAILA SPREJER, PARKER FOE, ROY WHITE, TIMO HONSEL**
+
+# Part C. Querying the World Bank API
+
+1. The goal of this part of the assignment is to obtain country-level development indicators that may be related to lingustic fragmentation from the World Bank API. You can read the documentation and instructions [here](https://datahelpdesk.worldbank.org/knowledgebase/articles/898581-basic-api-call-structures).
+
+Write a function that will take an indicator code (e.g. `SP.POP.TOTL`) as input, query the API and parse the JSON output, and then return a clean data frame where each row is a country. If you're not able to figure it out, you can also use the `WDI` package. Feel free to take a look at the code for some clues on how to query the API (see e.g. [here](https://github.com/vincentarelbundock/WDI/blob/master/R/WDI.R)). 
+
+**For the function below, we chose to have inputs for the date as well as inputs for the indicator ID number and indicator name. This is because the most recent year with no NAs for any country in the European Union differs from indicator to indicator. For example, fertility rate data is only available up to 2017, whereas GDP per capita is available up to 2018. The maximum number of responses to any query was less than 20,000, so we set the results per page in the query to be up to 20,000.**
+
+```{r global_options, include = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE,
+                      fig.width = 10, fig.height = 6)
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+library(dplyr)
+world_bank_query <- function(indicator_id, indicator_name, date = 2018) {
+  url <- paste("http://api.worldbank.org/v2/country/all/indicator/",
+               indicator_id, "?format=json&per_page=20000&date=",
+               date, sep = "")
+  data_raw <- fromJSON(url)
+  data_df <- lapply(data_raw, function(j) cbind(j$country[[2]],
+                                                j$value, j$date))
+  data_df <- data.frame(do.call("rbind", data_df),
+                        stringsAsFactors = FALSE)
+  data_df <- select(data_df, -3)
+  colnames(data_df) <- c("country", indicator_name)
+  data_df[indicator_name] <- as.numeric(unlist(data_df[indicator_name]))
+  return(data_df)
+}
+
+# Function only returns data for 2018 - the most recent year available.
+```
+
+
+2. Using the function you just created, get country-level data on two metrics: GDP per capita and another metric that you consider could be correlated to language fractionalization. (See the Alesina et al paper for inspiration.)
+
+```{r}
+# gdp per capita, current US$
+gdp_pcap_data <- world_bank_query("NY.GDP.PCAP.CD", "gdp_per_capita")
+
+# number of deaths per 1,000 live births of children under one year of age
+infant_mort_data <- world_bank_query("SP.DYN.IMRT.IN", "infant_mortality_rate")
+
+
+unemployment <- world_bank_query("SL.UEM.TOTL.ZS", "unemployment")
+fertility_rate <- world_bank_query("SP.DYN.TFRT.IN", "fertility_rate",
+                                   date = 2017)
+
+
+world_bank_data <- merge(gdp_pcap_data, infant_mort_data, by = "country")
+world_bank_data <- merge(world_bank_data, unemployment, by = "country")
+world_bank_data <- merge(world_bank_data, fertility_rate, by = "country")
+
+```
+
+3. Merge this new country-level dataset with the dataset you created at the end of part B. As before, you may need to fix some of the country names to ensure that all countries can be merged.
+
+```{r}
+library(tidyverse)
+library(tidyverse)
+library(countrycode)
+
+world_bank_data <- world_bank_data %>%
+    mutate(country_code = countrycode(world_bank_data$country,
+                                      "country.name", "iso3c", nomatch = NA))
+
+world_bank_data <- select(world_bank_data, -"country")
+
+merge_lang <- read_csv("fract_merge.csv")
+all_data <- merge(merge_lang, world_bank_data,
+                  by = "country_code", all.x = TRUE)
+```
+
+4. What can you learn about the relationship between language fractionalization and economic development from this new dataset? Can you replicate the findings in Tables 5 and 8 of the paper? Use any statistical or graphic analyses that you consider appropriate to answer this question.
+
+**We create a correlation matrix for all possible variables detailed in our merged data. From this, we see that the language fractionalization created by the Twitter data (excluding the comparision between fractionalization measurements made already in part B) has at most a weak negative correlation with the economic development variables. The strongest relationship is the one with unemployment; suggesting that there is a weak correlation between increasing language fractionalization and a decrease in unemployment. Similarly with fertility rate, there is a correlation between increasing language fractionalization and a decrease in employment.**
+
+**While still a weak correlation, the fractionalization created by Alesina produce stronger, different, relationships than the Twitter fractionalization. The strongest relationship is the negative correlation between the 2003 data and infant mortality rates, which suggest there is a weak correlation between increased language fractionalization and a decrease in infant mortality. On the other hand, there is a weak but positive relationship between increased language fractionalization and an increase in GDP per capita for that country.**
+
+**We then fit a generalized linear model for all variables as it relates to the GDP per capita and find that neither the Twitter nor the Alesina fractionalization are significant, meaning that there is no evidence of an effect on fractionalization on GDP per capita. Based on this and the above evidence, we cannot confidently say there is a relationship between language fractionalization and economic development that cannot be attributed to chance, with the tentative relationship being weak at best. Because of that, we are unable to replicate the findings in Tables 5 and 8 of the paper.**
+
+```{r}
+library(reshape2)
+# Table 5
+# Correlation between economic variables and fract
+vars <- c("gdp_per_capita", "infant_mortality_rate", "fract_twitter",
+          "fract_2003", "unemployment", "fertility_rate")
+cor(all_data[vars])
+
+model <- glm(data = all_data, formula = gdp_per_capita ~
+               fract_twitter + infant_mortality_rate + fertility_rate +
+               unemployment + fract_2003)
+coef(model)
+summary(model)
+```
+```{r}
+library(ggrepel)
+df2 <- melt(all_data[c("fract_twitter", "fertility_rate",
+                       "infant_mortality_rate", "unemployment")],
+            id.vars = "fract_twitter",
+            value.name = "value",
+            variable.name = "indicator")
+
+ggplot(all_data, aes(x = fract_twitter, y = gdp_per_capita)) +
+  geom_point() +
+  xlab("fract_twitter") + ylab("GDP per capita") +
+  scale_x_continuous(breaks = seq(0.1, .9, by = 0.1),
+                                     minor_breaks = NULL,
+                                     limits = c(.1, .9)) +
+  geom_label_repel(aes(label = country),
+                                  box.padding   = 0.35,
+                                  point.padding = 0.5,
+                                  segment.color = "grey50") +
+  ggtitle("GDP per capita and language fractionalization") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(df2, aes(x = fract_twitter, y = value, colour = indicator)) +
+  geom_point() + xlab("fract_twitter") + ylab("indicators") +
+  scale_x_continuous(breaks = seq(0.1, 0.9, by = 0.1),
+                                     minor_breaks = NULL,
+                                     limits = c(0.1, 0.9)) +
+  ggtitle("Economic indicators and language fractionalization") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+library(lintr)
+lintr::lint("C-world-bank-API.Rmd")
+```
+

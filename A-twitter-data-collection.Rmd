@@ -1,0 +1,249 @@
+**TEAM: LAILA SPREJER, PARKER FOE, ROY WHITE, TIMO HONSEL**
+
+# Part A. Collecting geolocated Twitter data.
+
+1. Collect a sample of geolocated tweets using a token created with the instructions found at https://developer.twitter.com.  The geographic bounding box can span the entire globe or -- probably better for the exercise -- just focus on a given continent (e.g. Europe or Africa). Keep the connection open for a while until you have a reasonably large sample. 100,000 to 200,000 tweets should be more than enough for this exercise.
+
+To avoid running this chunk of code every time you compile the file, you can either take this code to a separate R file, and just keep it here. (But make sure you explain that!) Or use the `cache` option in the R chunk, as shown below, to make sure it only re-runs after you change the code:
+```{r global_options, include = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE,
+                      fig.width = 10, fig.height = 6)
+```
+
+```{r, cache = TRUE}
+# Streaming taken into twitter-streaming.R
+
+# We decided to focus on EU countries.
+```
+
+In case you don't have a working token, [here](https://www.dropbox.com/s/n7l84t6vj95ue9e/europe-tweets.csv?dl=0)'s a link to a .csv file that contains nearly 200,000 geolocated tweets from Europe.
+
+Please don't upload the .json file with the Tweets to GitHub!  We suggest you store it somewhere else in your hard drive. This is the only RMarkdown file where you'll have to work with the entire dataset. You could also keep only the relevant variables that you need (similar as the .csv file above), and save only that (smaller) file.
+
+2. Read the Tweets into R and compute some descriptive statistics. How many Tweets did you collect? Which are the most popular hashtags? (This step may take some time as well, feel free to use the cache function below to make sure you're not re-reading the file every time you compile.)
+
+```{r, cache=TRUE}
+library(streamR)
+tweets <- parseTweets("tweets_geo_eu.json")
+print(paste("Total number of tweets collected: ", nrow(tweets)))
+
+# We first get the country name in order to filter EU countries.
+# Therefore, we are first solving ex 5.
+
+library(maps)
+library(tidyr)
+tweets$lat <- ifelse(is.na(tweets$lat), tweets$place_lat, tweets$lat)
+tweets$lon <- ifelse(is.na(tweets$lon), tweets$place_lon, tweets$lon)
+tweets <- tweets[!is.na(tweets$lat), ]
+tweets <- tweets[!is.na(tweets$lon), ]
+tweets$country <- map.where(x = tweets$lon, y = tweets$lat)
+head(unique(tweets$country), 10)
+tweets <- separate(tweets, country, c("country"), sep = ":", extra = "drop")
+
+eu <- c("Austria", "Italy", "Belgium", "Latvia", "Bulgaria",
+        "Lithuania", "Croatia", "Luxembourg", "Cyprus", "Malta",
+        "Czech Republic", "Netherlands", "Denmark", "Poland",
+        "Estonia", "Portugal", "Finland", "Romania", "France",
+        "Slovakia", "Germany", "Slovenia", "Greece", "Spain",
+        "Hungary", "Sweden", "Ireland", "UK")
+
+tweets <- tweets[which(tweets$country %in% eu), ]
+print(paste("Number of EU tweets collected: ", nrow(tweets)))
+```
+
+```{r}
+# As ISO codes are hard to interpret sometimes,
+# we got the language names from the wikipedia page.
+library(rvest)
+url <- "https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
+html_content <- read_html(url)
+tab <- html_table(html_content, fill = TRUE)
+
+isocodes <- tab[[2]][c("ISO language name", "639-1")]
+names(isocodes) <- c("language", "lang")
+
+# Compliment with some missing or old codes
+isocodes[isocodes$language == "Indonesian", ]["lang"] <- "in"
+isocodes[isocodes$language == "Hebrew", ]["lang"] <- "iw"
+isocodes[nrow(isocodes) + 1, ] <- c("Central Kurdish", "ckb")
+
+tweets <- merge(tweets, isocodes, by = "lang", all.x = TRUE)
+head(tweets[c("lang", "language")])
+```
+
+```{r}
+library(stringr)
+library(tidyverse)
+# Most popular hashtags
+tweets$hashtags <- str_extract_all(tweets$text, "#[[:alpha:]]+")
+tweets_h <- unnest(tweets, hashtags)
+hashtags_tab <- table(tweets_h$hashtags)
+print(head(sort(hashtags_tab, decreasing = TRUE)))
+```
+
+```{r}
+# Analyzing average number of tweets and followers by country
+library(dplyr)
+library(reshape2)
+df_plot <- summarise(group_by(tweets, country),
+          n_tweets = mean(statuses_count), n_followers = mean(followers_count))
+
+df_plot <- melt(df_plot,
+            id.vars = "country",
+            value.name = "value",
+            variable.name = "indicator")
+
+
+ggplot(data = df_plot, aes(x = country, y = value, fill = indicator)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  coord_flip() +
+  ggtitle("Number of tweets and followers by country") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+cor(tweets$statuses_count, tweets$followers_count)
+```
+**Lituania is clearly an outlier in terms of average tweets posted, but at the same time it has one of the lowest followers. The low number of tweets collected for Lituania makes us think that maybe there was a selection bias towards people that tweet much more than average, and therefore fell in our sample.  It is also interesting that for all our data it doesn't seem to be a correlation between number of tweets and followers.**
+```{r}
+# Analyzing followers / following ratio by country
+
+df_plot <- summarise(group_by(tweets, country),
+          followers_count = mean(followers_count),
+          friends_count = mean(friends_count))
+
+df_plot$follow_ratio <- df_plot$followers_count / df_plot$friends_count
+
+ggplot(data = df_plot, aes(x = country, y = follow_ratio)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  ggtitle("Followers / Following ratio by country") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+cor(tweets$friends_count, tweets$followers_count)
+```
+**The average followers/following ratio for our sample collected is usually more than one, with two high outliers being Malta and Austria.**
+
+3. Now examine the language data. Which are the most popular languages? How many unique languages did you find? Can you determine which language code corresponds to tweets whose languages couldn't be predicted?
+
+```{r}
+lang_tab <- table(tweets$language)
+print(head(sort(lang_tab, decreasing = TRUE)), 5)
+
+print(paste("number of unique languages: ",
+            n_distinct(tweets$language, na.rm = TRUE)))
+
+head(tweets[which(tweets$lang == "und"), ]$text)
+```
+**Tweets with undetermined languages are mostly urls, mentions, or unicode emojis**
+
+4. Produce a map of the region of the world where you collected the data that displays the language distribution by country. This map could take different forms - think which one could be best at conveying the relevant information.
+
+**We decided to make two maps. The first one clearly illustrates language heterogenity by country. The second one is designed to be able to get clearer labels on the data, since we have so many countries and languages**
+```{r}
+library("ggplot2")
+
+## Create a data frame with the map data
+map_dat <- map_data("world")
+
+# Removing tweets with no defined language
+tweets_without_und <- tweets[!is.na(tweets$language), ]
+
+ggplot(map_dat) +
+  geom_map(aes(map_id = region),
+           map = map_dat,
+           fill = "grey90",
+           color = "grey50",
+           size = 0.25) +
+  expand_limits(x = map_dat$long, y = map_dat$lat) +
+  # 2) limits for x and y axis
+  scale_x_continuous(limits = c(-9, 38)) +
+  scale_y_continuous(limits = c(35, 70)) +
+  # 3) adding the dot for each tweet
+  geom_point(data = tweets_without_und,
+  aes(x = lon, y = lat, color = language),
+  size = 1, alpha = 1 / 5) +
+
+  ggtitle("Language distribution of tweets in the EU") +
+  # 4) removing unnecessary graph elements
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        panel.background = element_blank(),
+        panel.border = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.background = element_blank(),
+        plot.title = element_text(hjust = 0.5)
+        )
+
+```
+
+
+```{r}
+library(plotly)
+plot_lang_dist <- summarise(group_by(tweets_without_und, country, language),
+                            n_tweets = n(), lat = mean(lat), lon = mean(lon))
+
+# common plot options
+g <- list(scope = "europe",
+  showframe = F, showland = T,
+  landcolor = toRGB("grey90")
+)
+
+g1 <- c(
+  g,
+  resolution = 50,
+  showcoastlines = T,
+  countrycolor = toRGB("white"),
+  coastlinecolor = toRGB("white"),
+  projection = list(type = "Mercator"),
+  list(lonaxis = list(range = c(-9, 38))),
+  list(lataxis = list(range = c(35, 70))),
+  list(domain = list(x = c(0, 1), y = c(0, 1)))
+)
+
+g2 <- c(
+  g,
+  showcountries = F,
+  bgcolor = toRGB("white", alpha = 0),
+  list(domain = list(x = c(0, .6), y = c(0, .6)))
+)
+
+p <- plot_lang_dist %>%
+  plot_geo(
+    locationmode = "country names", sizes = c(1, 600), color = I("black")
+  ) %>%
+  add_markers(
+    y = ~lat, x = ~lon, locations = ~country,
+    color = ~language, size = ~n_tweets, text = ~paste(n_tweets, "tweets")
+  ) %>%
+  layout(
+    title = "Language distribution of tweets in the EU",
+    geo = g1, geo2 = g2
+  )
+
+p
+```
+
+5. Finally, use the `map.where` function to identify the country from which each Tweet is coming from, and add it as a new variable to the data frame. Which countries produced the most and least tweets? 
+
+```{r}
+# Country variable alrady created in Q2.
+country_tab <- sort(table(tweets$country), decreasing = TRUE)
+head(country_tab)
+tail(country_tab)
+```
+
+
+Then, create a data frame with three variables: `country`, `language`, and `n_tweets` (number of tweets for each combination of country and language). To make it smaller, you can keep only the rows for which `n_tweets` is greater than 0. Save this data frame into a file called `country_language_distribution.csv` -- we will work with it in part B. 
+
+For a clue on what this dataset should look like, see the `Language data` tab in `2003_fractionalization.xls`.
+
+```{r}
+country_lang_dist <- summarise(group_by(tweets_without_und, country, language),
+                               n_tweets = n())
+write.csv(country_lang_dist, "country_language_distribution.csv")
+
+library(lintr)
+lintr::lint("A-twitter-data-collection.Rmd")
+```

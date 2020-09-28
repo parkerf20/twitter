@@ -1,0 +1,169 @@
+**TEAM: LAILA SPREJER, PARKER FOE, ROY WHITE, TIMO HONSEL**
+
+# Part B. Computing the language fractionalization index
+
+1. Read the .csv file you just created with the counts of Tweets per language and country. Use this dataset to compute an index of language fractionalization at the country level using the formula in equation (1) in the paper by Alesina et al (2003). Feel free to do this in any way that you consider most efficient, either using `dplyr` or with functions and loops.
+
+```{r global_options, include = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE,
+                      fig.width = 8, fig.height = 6)
+```
+
+
+```{r}
+#read csv file
+tweets <- read.csv(file = "country_language_distribution.csv")
+
+library(dplyr)
+
+#compute the index using the formula and add to column in tweets
+tweets <- tweets %>%
+  group_by(country) %>%
+  mutate(country_sum = sum(n_tweets))
+
+tweets <- tweets %>%
+  group_by(country) %>%
+  mutate(equation = (1 - sum((n_tweets / country_sum) ^ 2)))
+
+#aggregate index to countries
+tweet_country <- aggregate(list(fract_twitter = tweets$equation),
+                           by = list(country = tweets$country), FUN = mean)
+
+```
+
+2. Compute some descriptive statistics on this data, either through tables or graphs. Which countries have the highest and lowest levels of language fractionalization?
+
+**The country with the highest levels of language fractionalization is Bulgaria. The country with the lowest levels of language fractionalization is the United Kingdom**
+
+```{r}
+#descriptive statistics
+tweet_country %>%
+  summarize(minInd = min(fract_twitter),
+            minCountry = country[which.min(fract_twitter)],
+            maxInd = max(fract_twitter),
+            maxCountry = country[which.max(fract_twitter)])
+```
+
+```{r}
+library(plotly)
+
+layout <- list(
+  geo = list(
+    scope = "europe",
+    domain = list(
+      x = c(0, 1),
+      y = c(0, 1)
+    ),
+    lataxis = list(range = c(35.0, 70.0)),
+    lonaxis = list(range = c(-9.0, 38.0)),
+    showland = TRUE,
+    landcolor = "rgb(229, 229, 229)",
+    showcoastlines = TRUE
+  ),
+  title = "Language fractionalization in the EU",
+  legend = list(traceorder = "reversed")
+)
+p <- plot_ly() %>%
+  add_trace(
+    geo = "geo",
+    type = "choropleth",
+    z = tweet_country$fract_twitter,
+    showscale = TRUE,
+    locationmode = "country names",
+    locations = tweet_country$country,
+    autocolorscale = TRUE) %>%
+  layout(geo = layout$geo,
+         title = layout$title,
+         legend = layout$legend)
+
+p
+```
+
+3. Read the first sheet in `2003_fractionalization.xls` into R. Keep only the country and language fractionalization columns. (You can export the .xls file into a .csv file in Excel first if that's esier.)
+
+Then, merge this data frame with the country-level fractionalization index you computed using Twitter data. This may be somewhat painful due to the different spellings of the countries. You can use the `countrycode` package to help you, or manually fix some of the country names so that they're the same across data sources. Throughout this process, check the sample size of the initial and final files to make sure you didn't drop any relevant countries.
+
+```{r}
+#Convert from .xls to .csv and read into environment
+library(rio)
+library(countrycode)
+
+xls <- dir(pattern = "2003_fractionalization.xls")
+fract2003 <- mapply(convert, xls, gsub("2003_fractionalization.xls",
+                                       "2003_fractionalization.csv", xls))
+fract_data <- read.csv("2003_fractionalization.csv")
+
+#extract only the country and language columns and clean
+colnames(fract_data) <- as.character(unlist(fract_data[1, ]))
+fract_data <- select(fract_data, c(1, 5))
+fract_data <- tail(fract_data, -2)
+
+fract_data <- fract_data %>%
+    mutate(country_code = countrycode(fract_data$Country,
+                                      "country.name", "iso3c", nomatch = NA))
+
+tweet_country <- tweet_country %>%
+    mutate(country_code = countrycode(tweet_country$country,
+                                      "country.name", "iso3c"))
+
+#merge the tweet data and the 2003 fract data
+merge_lang <- merge(tweet_country, fract_data)
+merge_lang$language <- as.numeric(
+                        levels(merge_lang$Language))[merge_lang$Language]
+merge_lang <- select(merge_lang, -c(4, 5))
+colnames(merge_lang)[4] <- "fract_2003"
+
+print(paste("Nrow Twitter: ", nrow(tweet_country),
+            "| Nrow merge: ", nrow(merge_lang)))
+head(merge_lang)
+```
+
+
+4. Compare your new metric with the measure on fractionalization from Alesina et al. What is the correlation between the two? For which countries do you find any differences? Can you explain why? Use any statistical or graphical methods you consider appropriate to answer this question.
+
+**We compute the correlation between the Alesina (2003) and the Twitter (2019) fractionalization data and get a correlation coefficient of 0.425, which suggests there is a positive, weak to moderate linear relationship between the data collected in 2003 and 2019**
+
+```{r}
+
+#melt the data for statistical testing
+melt_lang <- reshape2::melt(merge_lang)
+
+#Compute correlation
+cor(merge_lang$fract_twitter, merge_lang$fract_2003)
+
+# Plot fractionalization by year and color by year
+library(ggpubr)
+ggboxplot(melt_lang, x = "variable", y = "value",
+          color = "variable", ylab = "Fractionalization Rate",
+          xlab = "Fractionalization Source",
+          main = "Fractionalization distribution"
+          )
+```
+
+**We also compute the differences between fractionalization in the Alesina and Twitter data. We first test for significance in the fractionalization differences, and based on the Shapiro Wilk test for normality we find that the distributions for both have p values less than 0.05, which means that the distributions are not normal. Therefore, we use a non-parametric two-sample Wilcoxon test to get a p value of less than 0.05, so we can say that there is a significant difference between the Alesina and Twitter fractionalization methods.**
+
+**In a country level, the countries with the largest difference between the Alesina and Twitter fractionalizations are Hungary, Austria, Greece, Denmark, Croatia, and Malta. This could be due to an increased rate of immigration into these countries over the past 13 years that result in higher language fractionalization. Most countries have a difference of at least 10% with the exception of the UK, Netherlands, Latvia, and Spain.**
+
+```{r}
+#SW normality test for 2019 and 2003 fractionals
+with(melt_lang, shapiro.test(melt_lang$value[melt_lang$variable]))
+
+#Conduct two-sample Wilcoxon test
+wilcox.test(value ~ variable, data = melt_lang, exact = FALSE)
+
+#Difference countries
+merge_lang <- merge_lang %>%
+    mutate(difference = abs(fract_twitter - fract_2003))
+
+merge_lang <- arrange(merge_lang, desc(difference))
+head(merge_lang)
+```
+
+
+Save the file to disk.
+
+```{r}
+write.csv(merge_lang, "fract_merge.csv")
+library(lintr)
+lintr::lint("B-fractionalization-index.Rmd")
+```
