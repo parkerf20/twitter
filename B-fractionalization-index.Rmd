@@ -1,15 +1,11 @@
-**TEAM: LAILA SPREJER, PARKER FOE, ROY WHITE, TIMO HONSEL**
-
 # Part B. Computing the language fractionalization index
 
-1. Read the .csv file you just created with the counts of Tweets per language and country. Use this dataset to compute an index of language fractionalization at the country level using the formula in equation (1) in the paper by Alesina et al (2003). Feel free to do this in any way that you consider most efficient, either using `dplyr` or with functions and loops.
+1. Read the .csv file created in part A with the counts of Tweets per language and country. Use this dataset to compute an index of language fractionalization at the country level using the formula in equation (1) in the paper by Alesina et al (2003).
 
 ```{r global_options, include = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE,
                       fig.width = 8, fig.height = 6)
 ```
-
-
 ```{r}
 #read csv file
 tweets <- read.csv(file = "country_language_distribution.csv")
@@ -31,7 +27,7 @@ tweet_country <- aggregate(list(fract_twitter = tweets$equation),
 
 ```
 
-2. Compute some descriptive statistics on this data, either through tables or graphs. Which countries have the highest and lowest levels of language fractionalization?
+2. Which countries have the highest and lowest levels of language fractionalization?
 
 **The country with the highest levels of language fractionalization is Bulgaria. The country with the lowest levels of language fractionalization is the United Kingdom**
 
@@ -79,9 +75,7 @@ p <- plot_ly() %>%
 p
 ```
 
-3. Read the first sheet in `2003_fractionalization.xls` into R. Keep only the country and language fractionalization columns. (You can export the .xls file into a .csv file in Excel first if that's esier.)
-
-Then, merge this data frame with the country-level fractionalization index you computed using Twitter data. This may be somewhat painful due to the different spellings of the countries. You can use the `countrycode` package to help you, or manually fix some of the country names so that they're the same across data sources. Throughout this process, check the sample size of the initial and final files to make sure you didn't drop any relevant countries.
+3. Read the first sheet in `2003_fractionalization.xls` into R and merge this data frame with the country-level fractionalization index computed using Twitter data
 
 ```{r}
 #Convert from .xls to .csv and read into environment
@@ -119,7 +113,7 @@ head(merge_lang)
 ```
 
 
-4. Compare your new metric with the measure on fractionalization from Alesina et al. What is the correlation between the two? For which countries do you find any differences? Can you explain why? Use any statistical or graphical methods you consider appropriate to answer this question.
+4. Compare your new metric with the measure on fractionalization from Alesina et al. What is the correlation between the two? For which countries do you find any differences? Can you explain why?
 
 **We compute the correlation between the Alesina (2003) and the Twitter (2019) fractionalization data and get a correlation coefficient of 0.425, which suggests there is a positive, weak to moderate linear relationship between the data collected in 2003 and 2019**
 
