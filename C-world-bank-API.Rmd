@@ -1,5 +1,3 @@
-**TEAM: LAILA SPREJER, PARKER FOE, ROY WHITE, TIMO HONSEL**
-
 # Part C. Querying the World Bank API
 
 1. The goal of this part of the assignment is to obtain country-level development indicators that may be related to lingustic fragmentation from the World Bank API. You can read the documentation and instructions [here](https://datahelpdesk.worldbank.org/knowledgebase/articles/898581-basic-api-call-structures).
@@ -34,8 +32,6 @@ world_bank_query <- function(indicator_id, indicator_name, date = 2018) {
 
 # Function only returns data for 2018 - the most recent year available.
 ```
-
-
 2. Using the function you just created, get country-level data on two metrics: GDP per capita and another metric that you consider could be correlated to language fractionalization. (See the Alesina et al paper for inspiration.)
 
 ```{r}
@@ -56,9 +52,7 @@ world_bank_data <- merge(world_bank_data, unemployment, by = "country")
 world_bank_data <- merge(world_bank_data, fertility_rate, by = "country")
 
 ```
-
-3. Merge this new country-level dataset with the dataset you created at the end of part B. As before, you may need to fix some of the country names to ensure that all countries can be merged.
-
+3. Merge this new country-level dataset with the dataset created at the end of part B.
 ```{r}
 library(tidyverse)
 library(tidyverse)
@@ -75,7 +69,7 @@ all_data <- merge(merge_lang, world_bank_data,
                   by = "country_code", all.x = TRUE)
 ```
 
-4. What can you learn about the relationship between language fractionalization and economic development from this new dataset? Can you replicate the findings in Tables 5 and 8 of the paper? Use any statistical or graphic analyses that you consider appropriate to answer this question.
+4. What can you learn about the relationship between language fractionalization and economic development from this new dataset? Can you replicate the findings in Tables 5 and 8 of the paper?
 
 **We create a correlation matrix for all possible variables detailed in our merged data. From this, we see that the language fractionalization created by the Twitter data (excluding the comparision between fractionalization measurements made already in part B) has at most a weak negative correlation with the economic development variables. The strongest relationship is the one with unemployment; suggesting that there is a weak correlation between increasing language fractionalization and a decrease in unemployment. Similarly with fertility rate, there is a correlation between increasing language fractionalization and a decrease in employment.**
 
